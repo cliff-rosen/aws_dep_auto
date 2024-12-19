@@ -1,0 +1,43 @@
+2024-12-19 18: 07: 00 - INFO - HTTPS configuration updated successfully
+{
+    "EnvironmentName": "ra-env",
+    "EnvironmentId": "e-mupqustvif",
+    "ApplicationName": "ra-app",
+    "VersionLabel": "app-241219_180122442113",
+    "SolutionStackName": "64bit Amazon Linux 2023 v4.3.2 running Python 3.11",
+    "PlatformArn": "arn:aws:elasticbeanstalk:us-east-1: :platform/Python 3.11 running on 64bit Amazon Linux 2023/4.3.2",
+    "Description": "Environment created from the EB CLI using "eb create"",
+    "EndpointURL": "awseb--AWSEB-vXXNJFFmnfC7-941954969.us-east-1.elb.amazonaws.com",
+    "CNAME": "ra-env.eba-pjhubke9.us-east-1.elasticbeanstalk.com",
+    "DateCreated": datetime.datetime(2024,
+    12,
+    19,
+    23,
+    1,
+    50,
+    616000, tzinfo=tzutc()),
+    "DateUpdated": datetime.datetime(2024,
+    12,
+    19,
+    23,
+    6,
+    59,
+    277000, tzinfo=tzutc()),
+    "Status": "Updating",
+    "AbortableOperationInProgress": True,
+    "Health": "Grey",
+    "Tier": {
+        "Name": "WebServer",
+        "Type": "Standard",
+        "Version": "1.0"
+    },
+    "EnvironmentArn": "arn:aws:elasticbeanstalk:us-east-1: 183944926635:environment/ra-app/ra-env",
+    "ResponseMetadata": {
+        "RequestId": "67347caa-41b2-4fb4-ab01-0786be23b585",
+        "HTTPStatusCode": 200,
+        "HTTPHeaders": {
+            "date": "Thu,19 Dec 2024 23: 07: 00 GMT", "content-type": "text/xml", "content-length": "1436", "connection": "keep-alive", "x-amzn-requestid": "67347caa-41b2-4fb4-ab01-0786be23b585"
+        },
+        "RetryAttempts": 0
+    }
+}
