@@ -1,0 +1,288 @@
+AWS SPA Stack Deployment Guide
+
+
+I OVERVIEW
+
+This guide is for deploying an SPA application that consists of:
+
+  Frontend:
+	React deployed to S3 accessed via Route53/CloudFront
+
+  Backend:
+	App server: Python Flask on EC2 via Route53/Elastic Beanstalk
+	RDBMS: MariaDB via RDS
+
+
+II. REQUIREMENTS
+
+The requirements for each tier are as follows:
+
+1. Front end
+a. Served via https
+b. Drag and drop deployment via AWS console
+
+2. App server
+a. Served via https
+b. Production grade process management for python
+c. Automated or semi-automated deployment
+
+3. RDBMS
+a. Accessible from AWS servers and from local environment
+b. Automated backups
+
+
+III. AWS SERVICES
+
+The essential components are Route 53, CloudFront, S3, EB/EC2, RDB
+
+S3, EC2 and RDB are the workhorses.
+Route 53 and CloudFront are used for accessibility.
+
+  frontend: Route 53 -> CloudFront -> S3
+  backend: Route 53 -> EB Load Bal -> EC2 -> RDB
+
+
+IV. DETAILED STEPS
+
+Following are the detailed steps for setup and deployment.
+
+A. FRONT END
+
+Files are stored in S3.  
+Requests are https to cloudfront and then http from cloudfront to S3
+browser <--https--> cloudfront <--http--> S3
+
+0. Determine the domain name you will use to access the bucket
+
+1. S3 bucket
+a. Create bucket
+- Navigate to Amazon S3
+- Click on "Create Bucket"
+- Enter settings as follows:
+ - bucket name must be exact match with domain name
+ - under "Block Public Access settings for this bucket"
+  - disable "Block all public access"
+  - select checkbox to acknowledge "Turning off block all..."
+ - Click on "Create bucket"
+
+b. Update bucket permissions to allow public access
+- from S3 bucket list, select bucket
+(note how "Access" to bucket is shown as "Objects can be public". this will change to "Public)
+- go to Permissions tab
+- Under "Bucket policy" click Edit
+- Paste in the below policy and click Save Changes. Be sure to change MY_BUCKET_NAME to the correct bucket name
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PublicReadGetObject",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::MY_BUCKET_NAME/*"
+            ]
+        }
+    ]
+}
+(At this point, the Access shown in the bucket list should say "Objects can be public")
+
+c. Update bucket properties to allow static web hosting
+- select Properties tab of bucket
+- scroll down to "Static website hosting" and click "Edit"
+- change "Disable" to "Enable"
+- under "Index document" enter: index.html
+- under "Error document" enter: index.html
+- click "Save changes"
+
+The bucket resources should now be available from the url shown in the "Static website hosting" section
+
+d. Deploy
+- in React repo, update conf files and run "npm run build"
+- from AWS console S3 service, select bucket from bucket list
+- make sure Objects tab is selected and click Upload
+- drag and drop react build folder contents to Upload area. Be sure to select individual files and folders within "build" folder rather than "build" folder itself
+- click "Upload" button
+
+You now now created an S3 bucket making a React app available via http
+
+(verify direct access to static site URL)
+
+2. Create certificate
+- in aws certificate manager, click "Request a certificate"
+- choose public certificate
+- add domain names for certificate (i.e. www.ironcliff.ai and api.ironcliff.ai)
+- choose DNS validation
+- choose RSA 2048
+- click "Request"
+- Certificate will show as status "Pending validation". Select certificate.
+- Click "Create records in Route 53", and then "Create records"
+- After a few minutes, status should change to "Issued"
+
+3. Create cloudfront distribution
+a. in CloudFront, click "Create a CloudFront distribution"
+enter values as follows:
+- Origin domain: point to S3 bucket
+- Origin access: Public
+- Viewer protocol policy: Redirect HTTP to HTTPS
+- Allow HTTP methods: GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE
+- Cache policy: CachingDisabled
+[- Origin request policy: CORS-S3Origin ???]
+[- Response headers policy: SimpleCORS ???]
+- Web Application Firewall: Do not enable security protections
+- Alternate domain name: Add item as desired domain name
+- Custom SSL certificate: select cert created above
+- Default root object: index.html
+- Click "Create distribution"
+
+Distribution is created immediately with status "Enabled" and last modified "Deploying"
+Once last modified changes to date the distribution is ready
+
+b. Add custom error page
+- click on distribution from list
+- go to "Error pages"
+- click "Create custom error response"
+- HTTP error code: "403: forbidden"
+- Under "Customize error response" select Yes
+  - set Response page path to "/index.html"
+  - set HTTP Response Code to "200: OK"
+- Click "Create custom error response"
+
+4. Route 53
+- select desired hosted zone
+- select Create record
+- enter subdomain per DNS entered above
+- Record type: A - Routes traffic to an IPv4 address and some AWS resources
+- Select "Alias"
+- Route traffic to: 
+ endpoint: Alias to CloudFront distribution
+ select the CloudFront distribution created above
+
+
+
+B. APP SERVER - PYTHON
+
+OVERVIEW:
+Elastic beanstalk automatically creates EC2 instance with nginx, gunicorn, python
+Requests come in https to load balancer and then http from load balancer to instance
+Three URLs/entry points are creates:
+- URL used by app for HTTPS access
+- Load Balancer that Route53 maps URL to
+- EC2 instances that Load Balancer maps to
+
+NOTE:
+Do not use mariadb module!!! it's not compatible with aws linux. use PyMySql
+
+REF:
+https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/create-deploy-python-flask.html
+
+SETUP:
+1. Local machine has python installed and python codebase
+2. Install EB CLI on local machine where code resides
+https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/eb-cli3-install.html
+This requires a security key from the AWS Console "Security credentials" option
+
+DEPLOYMENT:
+
+1. From root directory of code base (ie directory with application.py):
+
+a. create requirements.txt in a virtual environment (optional?)
+	rd /s virt
+	virtualenv virt
+	virt\Scripts\activate.bat
+	pip install ... (install all required modules)
+	pip freeze > requirements.txt
+	[create .ebignore file and include "virt" as the only entry]
+  
+b. create eb application and environment
+	eb init -p python-3.8 APP_NAME --region us-east-1
+	[or: eb init --interactive #option if you need to SSH]
+	eb create ENV_NAME	# this will deploy the app to the a new EB environment
+
+c. eb commands:
+	eb open
+	eb terminate ENV_NAME
+	eb deploy ENV_NAME	# redeploy latest version of app to EB environment
+
+The path to the environment can be found by "eb open" or from AWS Console -> Elastic Beanstalk -> Environments
+
+This creates:
+ Elastic Beanstalk -> App
+ Elastic Beanstalk -> Environment
+ S3 bucket with code
+ EC2 instance running python, etc.
+   Nginx -> gunicorn -> python (via WSGI)
+   WSGI expects "application" variable in application.py
+https://vsupalov.com/gunicorn-and-nginx
+
+You can access the Flask endpoints at the url found here:
+Elastic Beanstalk -> Environments -> MY_ENVIRONMENT -> Environment Overview -> Domain
+
+For SSH access:
+a. From EC2 -> Security Group, select group for elastic beanstalk
+b. Add inbound rule for SSH
+
+
+2. Run deployment command to deploy new version:
+Run this from root folder:
+ eb deploy environmentname
+
+3. Set up https
+https to load balancer and http from load balancer to instance
+https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/configuring-https-elb.html
+a. Go to Elastic Beanstalk -> Environments
+b. Select "Environments"
+c. Click on environment in the list
+d. Click "Configuration" on left
+e. In "Instance traffic and scaling" click "Edit"
+- Availability Zones/Placement: not sure here. 
+- Listeners: "Add listener"
+  Port: 443
+  Protocol: HTTPS
+  SSL certificate: as created above (when setting up S3)
+  SSL policy: leave blank
+  Default process: default
+ Click "Save"
+ Click "Apply"
+
+4. in Route 53, point app url to url for elastic beanstalk instance
+ Create record
+ Enter record name (i.e. cognify-api)
+ Record type: A - ROutes traffic to an IPv4 addressa and some AWS resources
+ Route traffic to
+  Alias to Application and Classic Load Balancer
+  Select region to match availability zone set with eb init
+  Select load balancer instance (match with listing under EC2 -> Load Balancers)
+  Click "Create records"
+
+
+C. RDBMS
+
+1. create database
+  easy create, mariadb
+
+2. make publicly available
+  wait until instance is created (status will become "Available)
+  then select Modify option from top menu
+  Under Connectivity, extend the Additional configuration section
+  and then choose Publicly accessible. Choose Continue. 
+  Choose "Apply immediately".  Choose Modify DB Instance.
+
+3. change Inbound rules to make publicy accessible
+ from Connectivity and Security, click on VPC security group default
+ select Inbound rules tab, and then Edit inbound rules
+ add rule to allow all traffic from all ips (or try limiting to TCP port 3306)
+
+4. Connect
+Record endpoint from "Connectivity & security"
+  endpoint: staging-database.cfasmshftc4z.us-east-1.rds.amazonaws.com
+
+Once "Connectivity & security" updates "Public accessibility" to "Yes"
+  connect from HeidiSQl
+  create database
+  run sql create script
+
+You can now connect from heidisql
+
