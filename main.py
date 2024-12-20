@@ -370,67 +370,112 @@ def create_frontend_route53_record(domain_name, cloudfront_domain_name):
         logger.error(f"Error creating Route53 record: {str(e)}")
         return None
 
-def configure_eb_https(environment_name, certificate_arn):
+def wait_for_eb_environment_ready(environment_name, timeout_seconds=300):
     """
-    Configures HTTPS for an Elastic Beanstalk environment by updating the load balancer configuration
+    Waits for an Elastic Beanstalk environment to be ready
     
     Args:
         environment_name (str): Name of the Elastic Beanstalk environment
-        certificate_arn (str): ARN of the ACM certificate
+        timeout_seconds (int): Maximum time to wait in seconds
         
     Returns:
-        dict: Response from the update operation
+        bool: True if environment is ready, False if timeout occurred
     """
-    logger.info(f"Configuring HTTPS for Elastic Beanstalk environment: {environment_name}")
+    logger.info(f"Waiting for environment {environment_name} to be ready...")
+    eb_client = boto3.client('elasticbeanstalk', region_name=AWS_REGION)
+    start_time = time.time()
     
+    while time.time() - start_time < timeout_seconds:
+        try:
+            response = eb_client.describe_environments(
+                EnvironmentNames=[environment_name],
+                IncludeDeleted=False
+            )
+            
+            if not response['Environments']:
+                logger.error(f"Environment {environment_name} not found")
+                return False
+                
+            status = response['Environments'][0]['Status']
+            health = response['Environments'][0]['Health']
+            
+            logger.info(f"Environment status: {status}, health: {health}")
+            
+            if status == 'Ready':
+                logger.info(f"Environment {environment_name} is ready")
+                return True
+                
+            time.sleep(10)  # Wait 10 seconds before checking again
+            
+        except ClientError as e:
+            logger.error(f"Error checking environment status: {str(e)}")
+            return False
+            
+    logger.error(f"Timeout waiting for environment {environment_name} to be ready")
+    return False
+
+def configure_eb_https(environment_name, certificate_arn):
     try:
+        if not wait_for_eb_environment_ready(environment_name):
+            logger.error("Environment not ready, aborting HTTPS configuration")
+            return None
+            
         eb_client = boto3.client('elasticbeanstalk', region_name=AWS_REGION)
         
-        # Configure HTTPS listener and force HTTPS
         option_settings = [
-            # HTTPS Listener configuration
+            # HTTPS Listener
             {
-                'Namespace': 'aws:elb:listener:443',
-                'OptionName': 'ListenerProtocol',
+                'Namespace': 'aws:elbv2:listener:443',
+                'OptionName': 'Protocol',
                 'Value': 'HTTPS'
             },
             {
-                'Namespace': 'aws:elb:listener:443',
-                'OptionName': 'InstancePort',
-                'Value': '80'
+                'Namespace': 'aws:elbv2:listener:443',
+                'OptionName': 'SSLCertificateArns',
+                'Value': certificate_arn
             },
             {
-                'Namespace': 'aws:elb:listener:443',
-                'OptionName': 'InstanceProtocol',
+                'Namespace': 'aws:elbv2:listener:443',
+                'OptionName': 'DefaultProcess',
+                'Value': 'default'
+            },
+            # HTTP Listener
+            {
+                'Namespace': 'aws:elbv2:listener:80',
+                'OptionName': 'Protocol',
                 'Value': 'HTTP'
             },
             {
-                'Namespace': 'aws:elb:listener:443',
-                'OptionName': 'SSLCertificateId',
-                'Value': certificate_arn
+                'Namespace': 'aws:elbv2:listener:80',
+                'OptionName': 'DefaultProcess',
+                'Value': 'default'
             },
-            # Disable default HTTP listener to force HTTPS
+            # Define the redirect process
             {
-                'Namespace': 'aws:elb:listener:80',
-                'OptionName': 'ListenerEnabled',
-                'Value': 'false'
-            },
-            # Load Balancer security policy
-            {
-                'Namespace': 'aws:elb:policies',
-                'OptionName': 'LoadBalancerPorts',
+                'Namespace': 'aws:elasticbeanstalk:environment:process:redirect',
+                'OptionName': 'Port',
                 'Value': '443'
             },
             {
-                'Namespace': 'aws:elb:policies',
-                'OptionName': 'SSLProtocol',
-                'Value': 'TLSv1.2'
+                'Namespace': 'aws:elasticbeanstalk:environment:process:redirect',
+                'OptionName': 'Protocol',
+                'Value': 'HTTPS'
             },
-            # Enable cross-zone load balancing
+            # Define the redirect rule
             {
-                'Namespace': 'aws:elb:loadbalancer',
-                'OptionName': 'CrossZone',
-                'Value': 'true'
+                'Namespace': 'aws:elbv2:listenerrule:redirect',
+                'OptionName': 'PathPatterns',
+                'Value': '/*'
+            },
+            {
+                'Namespace': 'aws:elbv2:listenerrule:redirect',
+                'OptionName': 'Priority',
+                'Value': '1'
+            },
+            {
+                'Namespace': 'aws:elbv2:listenerrule:redirect',
+                'OptionName': 'Process',
+                'Value': 'redirect'
             }
         ]
         
@@ -440,6 +485,12 @@ def configure_eb_https(environment_name, certificate_arn):
         )
         
         logger.info("HTTPS configuration updated successfully")
+        
+        if wait_for_eb_environment_ready(environment_name):
+            logger.info("HTTPS configuration changes applied successfully")
+        else:
+            logger.warning("Environment not ready after applying changes, but changes were submitted")
+            
         return response
         
     except ClientError as e:
