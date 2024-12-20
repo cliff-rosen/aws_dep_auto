@@ -6,9 +6,12 @@ from datetime import datetime
 import os
 import time
 
-# manual aspects of deployment 
-# before running script create eb app and env and then deploy
-# after running script, npm run build and copy files to S3 bucket
+# Instructions:
+#1. Before running script:
+#  create eb app and env and then deploy
+#  update the orchestration variables below
+#2. After running script, npm run build and copy files to S3 bucket
+
 
 # Constants
 AWS_REGION = "us-east-1"
