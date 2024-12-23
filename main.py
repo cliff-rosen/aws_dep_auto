@@ -15,7 +15,8 @@ import time
 #1. Before running script:
 #  create eb app and env and then deploy
 #  update the orchestration variables below
-#2. After running script, npm run build and copy files to S3 bucket
+#2. Run script
+#3. After running script, npm run build and copy files to S3 bucket
 
 
 # Constants
@@ -594,8 +595,3 @@ def deploy_app():
     # Create Route53 record for backend
     create_backend_route53_record(backend_domain)
 
-
-cert_arn = "arn:aws:acm:us-east-1:183944926635:certificate/7ac292e7-f387-4805-abbf-2c28d9e59129"
-eb_result = configure_eb_https(EB_ENV_NAME, cert_arn)
-
-# be_route53_result = create_backend_route53_record(backend_domain)
