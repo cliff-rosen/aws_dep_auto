@@ -31,7 +31,6 @@ EB_ENV_NAME = "ra-env"
 
 frontend_domain = f"{FRONTEND_SUBDOMAIN}.{DOMAIN_NAME}"
 backend_domain = f"{BACKEND_SUBDOMAIN}.{DOMAIN_NAME}"
-s3 = boto3.client("s3", region_name=AWS_REGION)
 
 # Create logs directory if it doesn't exist
 if not os.path.exists('logs'):
