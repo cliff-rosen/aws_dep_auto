@@ -6,6 +6,11 @@ from datetime import datetime
 import os
 import time
 
+# This script is used to deploy an SPA application that consists of:    
+# Frontend: React deployed to S3 accessed via Route53/CloudFront
+# Backend: App server: Python Flask on EC2 via Route53/Elastic Beanstalk
+# RDBMS: MariaDB via RDS
+
 # Instructions:
 #1. Before running script:
 #  create eb app and env and then deploy
