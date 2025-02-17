@@ -13,9 +13,9 @@ import time
 
 # Instructions:
 #1. Before running script:
-#  create eb app and env and then deploy
+#  create eb app and env and then eb deploy
 #  update the orchestration variables below
-#2. Run script
+#2. Run deploy_app()
 #3. After running script, npm run build and copy files to S3 bucket
 
 
